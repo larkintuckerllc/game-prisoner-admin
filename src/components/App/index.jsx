@@ -6,15 +6,16 @@ import 'firebase/auth';
 import 'firebase/database';
 import { FIREBASE_CONFIG, FIREBASE_EMAIL, RUNNING } from '../../strings';
 import { ServerException } from '../../util/exceptions';
-import game from '../../apis/game';
-import round from '../../apis/round';
-import score from '../../apis/score';
 import * as fromAuthenticated from '../../ducks/authenticated';
 import * as fromConnected from '../../ducks/connected';
 import * as fromGameState from '../../ducks/gameState';
+import * as fromPlayers from '../../ducks/players';
 import Connecting from './Connecting';
 import Alert from './Alert';
+import Control from './Control';
 import Login from './Login';
+import Players from './Players';
+import State from './State';
 
 const handleLogin = password => (
   firebase.auth().signInWithEmailAndPassword(
@@ -31,6 +32,7 @@ class App extends Component {
   constructor(props) {
     super(props);
     this.handleGameState = this.handleGameState.bind(this);
+    this.handlePlayerAdded = this.handlePlayerAdded.bind(this);
   }
   componentDidMount() {
     const {
@@ -52,6 +54,8 @@ class App extends Component {
         });
         // STATE
         firebase.database().ref('gameState').on('value', this.handleGameState);
+        // PLAYERS
+        firebase.database().ref('joined').on('child_added', this.handlePlayerAdded);
       }
     });
     firebase.auth().signOut();
@@ -61,33 +65,39 @@ class App extends Component {
     const gameState = gameStateSnap.val();
     setGameState(gameState);
   }
+  handlePlayerAdded(snap) {
+    const { addPlayer } = this.props;
+    const playerKey = snap.getKey();
+    addPlayer({
+      id: playerKey,
+    });
+  }
   render() {
     const {
       authenticated,
       connected,
       gameState,
+      players,
     } = this.props;
     if (RUNNING) return <Alert message="running in another window" />;
     if (!authenticated) return <Login onLogin={handleLogin} />;
-    if (!connected) return <Connecting />;
+    if (!connected || gameState === null) return <Connecting />;
     return (
       <div>
-        <div>{gameState}</div>
-        <button onClick={round}>ROUND</button>
-        <button onClick={() => {
-          firebase.database().ref('gameState').set('SELECTING');
-        }}
-        >SELECTING</button>
-        <button onClick={score}>SCORE</button>
-        <button onClick={game}>GAME</button>
+        <State gameState={gameState} />
+        <Players players={players} />
+        <Control gameState={gameState} />
       </div>
     );
   }
 }
 App.propTypes = {
+  addPlayer: PropTypes.func.isRequired,
   authenticated: PropTypes.bool.isRequired,
   connected: PropTypes.bool.isRequired,
   gameState: PropTypes.string,
+  // eslint-disable-next-line
+  players: PropTypes.array.isRequired,
   setAuthenticated: PropTypes.func.isRequired,
   setConnected: PropTypes.func.isRequired,
   setGameState: PropTypes.func.isRequired,
@@ -100,8 +110,10 @@ export default connect(
     authenticated: fromAuthenticated.getAuthenticated(state),
     connected: fromConnected.getConnected(state),
     gameState: fromGameState.getGameState(state),
+    players: fromPlayers.getPlayers(state),
   }),
   {
+    addPlayer: fromPlayers.addPlayer,
     setAuthenticated: fromAuthenticated.setAuthenticated,
     setConnected: fromConnected.setConnected,
     setGameState: fromGameState.setGameState,
