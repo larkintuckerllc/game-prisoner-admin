@@ -9,6 +9,7 @@ import { ServerException } from '../../util/exceptions';
 import * as fromAuthenticated from '../../ducks/authenticated';
 import * as fromConnected from '../../ducks/connected';
 import * as fromGameState from '../../ducks/gameState';
+import * as fromRounds from '../../ducks/rounds';
 import * as fromPlayers from '../../ducks/players';
 import * as fromSelections from '../../ducks/selections';
 import Connecting from './Connecting';
@@ -16,6 +17,7 @@ import Alert from './Alert';
 import Control from './Control';
 import Login from './Login';
 import Players from './Players';
+import Rounds from './Rounds';
 import Selections from './Selections';
 import State from './State';
 
@@ -36,6 +38,7 @@ class App extends Component {
     this.handleGameState = this.handleGameState.bind(this);
     this.handlePlayerAdded = this.handlePlayerAdded.bind(this);
     this.handlePlayerRemoved = this.handlePlayerRemoved.bind(this);
+    this.handleRoundAdded = this.handleRoundAdded.bind(this);
     this.handleSelectionAdded = this.handleSelectionAdded.bind(this);
   }
   componentDidMount() {
@@ -63,16 +66,19 @@ class App extends Component {
         firebase.database().ref('joined').on('child_removed', this.handlePlayerRemoved);
         // SELECTIONS
         firebase.database().ref('selection').on('child_added', this.handleSelectionAdded);
+        // ROUNDS
+        firebase.database().ref('rounds').on('child_added', this.handleRoundAdded);
       }
     });
     firebase.auth().signOut();
   }
   handleGameState(snap) {
-    const { resetSelections, setGameState } = this.props;
+    const { resetRounds, resetSelections, setGameState } = this.props;
     const gameState = snap.val();
     switch (gameState) {
       case 'JOIN':
         resetSelections();
+        resetRounds();
         break;
       case 'DISCUSSING':
         resetSelections();
@@ -80,6 +86,15 @@ class App extends Component {
       default:
     }
     setGameState(gameState);
+  }
+  handleRoundAdded(snap) {
+    const { addRound } = this.props;
+    const roundKey = snap.getKey();
+    const value = snap.val();
+    addRound({
+      id: roundKey,
+      ...value,
+    });
   }
   handlePlayerAdded(snap) {
     const { addPlayer } = this.props;
@@ -110,6 +125,7 @@ class App extends Component {
       connected,
       gameState,
       players,
+      rounds,
       selections,
     } = this.props;
     if (RUNNING) return <Alert message="running in another window" />;
@@ -123,12 +139,14 @@ class App extends Component {
           <Selections selections={selections} />
         }
         <Control gameState={gameState} />
+        <Rounds rounds={rounds} />
       </div>
     );
   }
 }
 App.propTypes = {
   addPlayer: PropTypes.func.isRequired,
+  addRound: PropTypes.func.isRequired,
   addSelection: PropTypes.func.isRequired,
   authenticated: PropTypes.bool.isRequired,
   connected: PropTypes.bool.isRequired,
@@ -136,8 +154,11 @@ App.propTypes = {
   removePlayer: PropTypes.func.isRequired,
   // eslint-disable-next-line
   players: PropTypes.array.isRequired,
-  // eslint-disable-next-line
+  resetRounds: PropTypes.func.isRequired,
   resetSelections: PropTypes.func.isRequired,
+  // eslint-disable-next-line
+  rounds: PropTypes.array.isRequired,
+  // eslint-disable-next-line
   selections: PropTypes.array.isRequired,
   setAuthenticated: PropTypes.func.isRequired,
   setConnected: PropTypes.func.isRequired,
@@ -152,12 +173,15 @@ export default connect(
     connected: fromConnected.getConnected(state),
     gameState: fromGameState.getGameState(state),
     players: fromPlayers.getPlayers(state),
+    rounds: fromRounds.getRounds(state),
     selections: fromSelections.getSelections(state),
   }),
   {
     addPlayer: fromPlayers.addPlayer,
+    addRound: fromRounds.addRound,
     addSelection: fromSelections.addSelection,
     removePlayer: fromPlayers.removePlayer,
+    resetRounds: fromRounds.resetRounds,
     resetSelections: fromSelections.resetSelections,
     setAuthenticated: fromAuthenticated.setAuthenticated,
     setConnected: fromConnected.setConnected,
